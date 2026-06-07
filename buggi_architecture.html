@@ -1,0 +1,592 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.arch-wrap { padding: 1rem 0; }
+.nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem; }
+.nav button { font-size: 12px; padding: 5px 11px; border: 0.5px solid var(--color-border-secondary); border-radius: 20px; background: transparent; color: var(--color-text-secondary); cursor: pointer; transition: all .15s; }
+.nav button:hover { background: var(--color-background-secondary); }
+.nav button.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); font-weight: 500; }
+.section { display: none; }
+.section.active { display: block; }
+.section-title { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+.section-sub { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 1rem; }
+.mermaid-wrap { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); padding: 1rem; overflow-x: auto; margin-bottom: 1rem; }
+.mermaid { text-align: center; }
+.note { font-size: 12px; color: var(--color-text-secondary); background: var(--color-background-secondary); border-left: 2px solid var(--color-border-primary); padding: 8px 12px; border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0; margin-top: 8px; }
+.badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin-right: 4px; margin-bottom: 4px; }
+.badge-blue { background: var(--color-background-info); color: var(--color-text-info); }
+.badge-green { background: var(--color-background-success); color: var(--color-text-success); }
+.badge-amber { background: var(--color-background-warning); color: var(--color-text-warning); }
+.badge-red { background: var(--color-background-danger); color: var(--color-text-danger); }
+.rec-box { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px; margin-bottom: 8px; }
+.rec-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-tertiary); margin-bottom: 4px; }
+.rec-text { font-size: 13px; color: var(--color-text-primary); line-height: 1.6; }
+</style>
+<div class="arch-wrap">
+<div class="nav" id="nav"></div>
+<div id="sections"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: dark ? 'dark' : 'default',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  fontSize: 13,
+  flowchart: { curve: 'basis', padding: 12 },
+  sequence: { actorMargin: 40 },
+});
+
+const sections = [
+  {
+    id: 'system',
+    label: '1 · System overview',
+    title: 'High-level system architecture',
+    sub: 'Top-down view of Buggi — from program intake to report delivery',
+    diagram: `graph TB
+  subgraph EXT["External inputs"]
+    P[Program scope]
+    T[Target URLs]
+    K[Knowledge base]
+  end
+  subgraph CTRL["Control plane"]
+    API[REST / gRPC gateway]
+    AUTH[Auth & rate limit]
+    ORCH[Orchestrator service]
+  end
+  subgraph AGENTS["Agent mesh"]
+    PL[Planner agent]
+    RC[Recon agent]
+    BR[Browser agent]
+    AP[API agent]
+    VR[Verification agent]
+    RP[Report agent]
+  end
+  subgraph INFRA["Infrastructure"]
+    MQ[Message queue — Redis Streams]
+    DB[(PostgreSQL)]
+    VDB[(Vector DB — Qdrant)]
+    OBJ[(Object store — S3)]
+    CACHE[(Redis cache)]
+  end
+  subgraph TOOLS["Tool layer"]
+    PW[Playwright]
+    NC[Nuclei]
+    HX[httpx]
+    SF[subfinder]
+    KT[katana]
+    SM[sqlmap]
+  end
+  P --> API
+  T --> API
+  K --> VDB
+  API --> AUTH --> ORCH
+  ORCH --> MQ
+  MQ --> PL --> RC & BR & AP
+  RC --> VR
+  BR --> VR
+  AP --> VR
+  VR --> RP
+  AGENTS --> DB & CACHE
+  RC --> TOOLS
+  BR --> PW
+  AP --> HX & SM
+  VR --> NC
+  RP --> OBJ
+  VDB --> PL`,
+    notes: 'All inter-agent communication is async via message queue. Agents are stateless; state lives in PostgreSQL + Redis. The orchestrator enforces scope rules before any agent dispatches work.'
+  },
+  {
+    id: 'agents',
+    label: '2 · Agent architecture',
+    title: 'Agent internals & LLM loop',
+    sub: 'ReAct-style think → act → observe loop for each agent',
+    diagram: `graph LR
+  subgraph AGENT["Agent (generic)"]
+    IN[Incoming task] --> CTX[Context loader]
+    CTX --> MEM[Memory retrieval\nRAG + episodic]
+    MEM --> LLM[LavenX-CyberAgent\nLLM core]
+    LLM --> PLAN{Plan step}
+    PLAN -->|tool call| EXEC[Tool executor]
+    PLAN -->|done| OUT[Output emitter]
+    EXEC --> OBS[Observation]
+    OBS --> LLM
+    OUT --> EVAL[Self-eval\nconfidence score]
+    EVAL --> OUT2[Emit to queue]
+  end
+  subgraph SPEC["Specialisations"]
+    PL2[Planner — DAG builder]
+    RC2[Recon — passive intel]
+    BR2[Browser — DOM + JS]
+    AP2[API — schema + fuzz]
+    VR2[Verifier — PoC replay]
+    RP2[Reporter — CVSS + prose]
+  end
+  AGENT -.->|extends| SPEC`,
+    notes: 'Each agent wraps the base ReAct loop with domain-specific tools and system prompts. The self-eval step uses a lightweight classifier to score confidence before emitting — findings below threshold go to human review queue.'
+  },
+  {
+    id: 'dataflow',
+    label: '3 · Data flow',
+    title: 'End-to-end data flow',
+    sub: 'From scope ingestion to final report — data lineage',
+    diagram: `sequenceDiagram
+  actor User
+  participant GW as Gateway
+  participant OR as Orchestrator
+  participant PL as Planner
+  participant RC as Recon
+  participant BR as Browser
+  participant AP as APIAgent
+  participant VR as Verifier
+  participant RP as Reporter
+
+  User->>GW: POST /engage {scope, rules}
+  GW->>OR: create_engagement()
+  OR->>PL: task(parse_scope)
+  PL-->>OR: attack_surface_map
+  OR->>RC: task(enumerate)
+  OR->>BR: task(crawl)
+  RC-->>OR: subdomains, endpoints
+  BR-->>OR: js_routes, forms, cookies
+  OR->>AP: task(discover_apis)
+  AP-->>OR: openapi_schema, endpoints
+  OR->>PL: task(generate_hypotheses)
+  PL-->>OR: ranked_attack_hypotheses[]
+  loop For each hypothesis
+    OR->>BR: task(test_vuln)
+    BR-->>OR: finding_candidate
+    OR->>VR: task(verify)
+    VR-->>OR: verified_finding | false_positive
+  end
+  OR->>RP: task(generate_report)
+  RP-->>User: PDF + JSON report`,
+    notes: 'All messages are persisted to PostgreSQL before delivery to ensure replay on agent failure. The orchestrator tracks a DAG of tasks and retries with exponential backoff.'
+  },
+  {
+    id: 'database',
+    label: '4 · Database design',
+    title: 'PostgreSQL schema (core tables)',
+    sub: 'ERD for the primary relational store',
+    diagram: `erDiagram
+  ENGAGEMENTS {
+    uuid id PK
+    text program_name
+    jsonb scope_rules
+    text status
+    timestamp created_at
+  }
+  TASKS {
+    uuid id PK
+    uuid engagement_id FK
+    text agent_type
+    text status
+    jsonb input_payload
+    jsonb output_payload
+    int retry_count
+    timestamp started_at
+  }
+  FINDINGS {
+    uuid id PK
+    uuid engagement_id FK
+    uuid task_id FK
+    text title
+    text severity
+    float confidence_score
+    text status
+    jsonb evidence
+    text cvss_vector
+  }
+  ENDPOINTS {
+    uuid id PK
+    uuid engagement_id FK
+    text url
+    text method
+    jsonb params
+    text fingerprint
+  }
+  REPORTS {
+    uuid id PK
+    uuid engagement_id FK
+    text s3_path
+    text format
+    timestamp generated_at
+  }
+  ENGAGEMENTS ||--o{ TASKS : has
+  ENGAGEMENTS ||--o{ FINDINGS : produces
+  ENGAGEMENTS ||--o{ ENDPOINTS : discovers
+  ENGAGEMENTS ||--o{ REPORTS : generates
+  TASKS ||--o{ FINDINGS : creates`,
+    notes: 'Evidence blobs (screenshots, HTTP logs, PoC scripts) are stored in S3; only the key is in PostgreSQL. JSONB columns allow flexible schema evolution without migrations for payload fields.'
+  },
+  {
+    id: 'memory',
+    label: '5 · Memory architecture',
+    title: 'Multi-tier memory system',
+    sub: 'How Buggi remembers, retrieves, and learns across engagements',
+    diagram: `graph TD
+  subgraph WM["Working memory (Redis — per engagement)"]
+    CTX2[Current task context]
+    TRAIL[Breadcrumb trail]
+    HYPO[Active hypotheses]
+  end
+  subgraph EM["Episodic memory (PostgreSQL)"]
+    HIST[Task history]
+    FIND2[Past findings]
+    FP[False positive log]
+  end
+  subgraph SM2["Semantic memory (Qdrant — vectors)"]
+    KB[Bug bounty writeups]
+    CVE[CVE patterns]
+    TECH[Tech fingerprints]
+    PROG[Program profiles]
+  end
+  subgraph PM["Procedural memory (LLM weights — fine-tune)"]
+    RL2[RL-tuned policies]
+    TOOL2[Tool use patterns]
+  end
+  AGENT2[Agent LLM] --> |read/write| WM
+  AGENT2 --> |retrieve k-NN| SM2
+  AGENT2 --> |read history| EM
+  SM2 -.->|RAG context| AGENT2
+  EM -.->|few-shot examples| AGENT2
+  WM -.->|flush on complete| EM
+  PM -.->|weights| AGENT2`,
+    notes: 'Qdrant stores embeddings of bug writeups, CVE descriptions, and previous findings. At planning time, the top-5 similar historical findings are injected as few-shot context. Program profiles cache tech stack, past OOS, and known good/bad patterns per bounty program.'
+  },
+  {
+    id: 'events',
+    label: '6 · Event architecture',
+    title: 'Event-driven architecture',
+    sub: 'Redis Streams topology — producers, consumers, consumer groups',
+    diagram: `graph LR
+  subgraph PROD["Producers"]
+    OR2[Orchestrator]
+    AG[Agents]
+    TL[Tool runners]
+  end
+  subgraph STREAMS["Redis Streams"]
+    TS1[tasks stream]
+    TS2[findings stream]
+    TS3[tool-results stream]
+    TS4[alerts stream]
+    TS5[metrics stream]
+  end
+  subgraph CONS["Consumer groups"]
+    CG1[agent-workers\ngroup]
+    CG2[verifier-workers\ngroup]
+    CG3[reporter-workers\ngroup]
+    CG4[monitor-workers\ngroup]
+  end
+  OR2 -->|XADD| TS1
+  AG -->|XADD| TS2 & TS3
+  TL -->|XADD| TS3 & TS5
+  TS1 --> CG1
+  TS2 --> CG2
+  TS3 --> CG1 & CG2
+  TS4 --> CG4
+  TS5 --> CG4
+  CG1 -->|emit finding| TS2
+  CG2 -->|emit verified| TS4
+  CG3 -->|consume| TS2`,
+    notes: 'Consumer groups allow horizontal scaling of each worker type independently. Dead-letter logic: messages that fail ACK after 3 retries are moved to a :dlq stream and trigger a Slack alert. Retention: task events 7d, findings events 90d.'
+  },
+  {
+    id: 'queue',
+    label: '7 · Queue architecture',
+    title: 'Task queue & priority lanes',
+    sub: 'Priority-based routing through work queues',
+    diagram: `graph TD
+  subgraph PRI["Priority router"]
+    P0[P0 — live SSRF/RCE verify]
+    P1[P1 — high-severity test]
+    P2[P2 — normal recon]
+    P3[P3 — background crawl]
+  end
+  subgraph POOLS["Worker pools — auto-scaled"]
+    W0[Verifier workers x2]
+    W1[Agent workers x4]
+    W2[Browser workers x3]
+    W3[Crawler workers x2]
+  end
+  subgraph DLQ["Dead-letter"]
+    D1[DLQ — manual triage]
+  end
+  OR3[Orchestrator] --> P0 & P1 & P2 & P3
+  P0 --> W0
+  P1 --> W1
+  P2 --> W1 & W2
+  P3 --> W3
+  W0 & W1 & W2 & W3 -->|fail x3| D1`,
+    notes: 'Worker pools are Kubernetes Deployments with HPA on queue depth. P0 tasks preempt P2/P3 by having dedicated workers that are never shared. Browser workers are the most resource-heavy (Playwright + Chromium) and run in isolated pods.'
+  },
+  {
+    id: 'tools',
+    label: '8 · Tool execution',
+    title: 'Tool execution architecture',
+    sub: 'Sandboxed, audited, rate-limited tool execution',
+    diagram: `graph LR
+  AGENT3[Agent] --> TEI[Tool executor interface]
+  TEI --> AUTH2[Scope enforcement\nallow-list check]
+  AUTH2 -->|allowed| DISP[Dispatcher]
+  AUTH2 -->|OOS| BLOCK[Block + log]
+  subgraph RUNNERS["Isolated runners — Docker"]
+    R1[Playwright runner]
+    R2[Nuclei runner]
+    R3[httpx runner]
+    R4[subfinder runner]
+    R5[katana runner]
+    R6[sqlmap runner]
+  end
+  DISP --> R1 & R2 & R3 & R4 & R5 & R6
+  R1 & R2 & R3 & R4 & R5 & R6 --> RL[Rate limiter\nper-domain tokens]
+  RL --> EXEC2[Execute]
+  EXEC2 --> OUT3[Structured output]
+  OUT3 --> PARSE[Output parser + normaliser]
+  PARSE --> MQ2[Emit to stream]
+  EXEC2 -->|stdout/stderr| AUDIT[Audit log — S3]`,
+    notes: 'Each tool runner is a Docker container with no network access except the target and no filesystem write access except a /tmp scratch volume. The scope enforcer checks every URL against the program allow-list before execution. Output parsers convert tool-specific formats to a canonical Finding or Endpoint schema.'
+  },
+  {
+    id: 'verify',
+    label: '9 · Verification pipeline',
+    title: 'Verification & false-positive reduction',
+    sub: 'Multi-stage confidence scoring before a finding is reported',
+    diagram: `graph TD
+  CAND[Finding candidate\nfrom agent] --> TRIAGE{Severity triage}
+  TRIAGE -->|critical/high| FAST[Fast verify\nreplay request]
+  TRIAGE -->|med/low| SLOW[Full verify\nPoC script]
+  FAST --> CONF1{Confirmed?}
+  SLOW --> CONF2{Confirmed?}
+  CONF1 -->|no| FP2[Mark false positive\nstore in FP log]
+  CONF2 -->|no| FP2
+  CONF1 -->|yes| SCORE[CVSS scoring\nLLM-assisted]
+  CONF2 -->|yes| SCORE
+  SCORE --> DEDUP[Dedup check\nfingerprint hash]
+  DEDUP -->|duplicate| MERGE[Merge evidence]
+  DEDUP -->|new| HUMAN{Confidence >= 0.85?}
+  HUMAN -->|yes| AUTO[Auto-emit\nto report queue]
+  HUMAN -->|no| REVIEW[Human review\nqueue]
+  MERGE --> AUTO
+  FP2 --> VDB2[Update FP vectors\nin Qdrant]
+  VDB2 -.->|future context| CAND`,
+    notes: 'Deduplication uses a SHA-256 hash of (endpoint + parameter + vulnerability class). Confidence scoring is a weighted combination of: HTTP status, response diff, tool confidence flag, and LLM semantic analysis. False positives are vectorised and stored to improve future RAG retrieval.'
+  },
+  {
+    id: 'report',
+    label: '10 · Report pipeline',
+    title: 'Report generation pipeline',
+    sub: 'From verified findings to submission-ready bug bounty report',
+    diagram: `graph LR
+  VF[Verified findings\n+ evidence] --> AGG[Aggregator\ngroup by type]
+  AGG --> ENRICH[Enricher\nCVSS, CWE, refs]
+  ENRICH --> TMPL{Report template}
+  TMPL -->|HackerOne| H1[H1 markdown]
+  TMPL -->|Bugcrowd| BC[BC structured JSON]
+  TMPL -->|Generic| GEN[PDF + HTML]
+  H1 & BC & GEN --> LLM2[LLM prose writer\nRavenX model]
+  LLM2 --> REVIEW2[Self-review pass\nconsistency check]
+  REVIEW2 --> RENDER[Render + attach\nscreenshots, PoC]
+  RENDER --> S3B[Store in S3]
+  S3B --> NOTIFY[Notify user\nwebhook / email]`,
+    notes: 'The LLM prose writer uses a structured prompt that includes: finding title, CVSS vector, reproduction steps, impact statement, and remediation suggestion. The self-review pass checks for: missing steps, contradictions, and scope claims. Platform-specific formatters map to H1 or Bugcrowd field schemas.'
+  },
+  {
+    id: 'rl',
+    label: '11 · RL integration',
+    title: 'Future RL integration points',
+    sub: 'Where reinforcement learning hooks into the Buggi loop',
+    diagram: `graph TD
+  subgraph ENV["Environment (Buggi)"]
+    STATE[State: endpoints\nfindings, coverage]
+    ACTION[Actions: choose\nnext hypothesis]
+    REWARD[Reward signal]
+  end
+  subgraph REWARDS["Reward shaping"]
+    R_VALID[+10 valid finding]
+    R_HIGH[+5 high severity]
+    R_FP3[-3 false positive]
+    R_DUP[-1 duplicate]
+    R_COV[+0.5 new endpoint]
+  end
+  subgraph RL_LOOP["RL training loop"]
+    POLICY[Policy model\nfine-tuned RavenX]
+    PPO[PPO / GRPO trainer]
+    REPLAY[Experience replay\nbuffer]
+  end
+  STATE --> POLICY
+  POLICY --> ACTION
+  ACTION --> ENV
+  ENV --> REWARD
+  R_VALID & R_HIGH & R_FP3 & R_DUP & R_COV --> REWARD
+  REWARD --> REPLAY
+  REPLAY --> PPO --> POLICY
+  POLICY -.->|serves inference| AGENTS4[Live agents]`,
+    notes: 'V1 uses supervised fine-tuning only. RL is a V2+ feature. Key integration points: (1) Planner hypothesis ranking — train with finding validity as reward. (2) Tool selection — train with efficiency/finding ratio. (3) Crawl strategy — train with new endpoint discovery rate. Experience buffer isolates training from inference so live agents are never disrupted.'
+  },
+  {
+    id: 'scale',
+    label: '12 · Scalability',
+    title: 'Scalability architecture',
+    sub: 'Kubernetes topology for horizontal scaling',
+    diagram: `graph TB
+  subgraph K8S["Kubernetes cluster"]
+    subgraph NS_CTRL["namespace: buggi-control"]
+      GW2[API gateway\n2 replicas]
+      OR4[Orchestrator\n2 replicas]
+    end
+    subgraph NS_AGENTS["namespace: buggi-agents"]
+      PL3[Planner pods\nHPA 1-4]
+      RC3[Recon pods\nHPA 2-8]
+      AP3[API agent pods\nHPA 2-6]
+      VR3[Verifier pods\nHPA 2-6]
+    end
+    subgraph NS_BROWSER["namespace: buggi-browser"]
+      BR3[Browser pods\nHPA 1-6 — heavy]
+    end
+    subgraph NS_DATA["namespace: buggi-data"]
+      PG[PostgreSQL\nPrimary + replica]
+      QD[Qdrant cluster\n3 nodes]
+      RD[Redis Cluster\n3 nodes]
+    end
+  end
+  CDN[CDN / WAF] --> GW2
+  GW2 --> OR4
+  OR4 --> PL3 & RC3 & AP3 & VR3 & BR3
+  PL3 & RC3 & AP3 & VR3 & BR3 --> RD & PG & QD`,
+    notes: 'Browser pods (Playwright + Chromium) request 2 CPU / 2 GB RAM each — they are the dominant scaling cost. Use spot instances for P2/P3 browser work. Control plane pods are on on-demand nodes. Qdrant runs a 3-node cluster for vector search HA. PostgreSQL uses a primary-replica setup with PgBouncer for connection pooling.'
+  },
+  {
+    id: 'security',
+    label: '13 · Security',
+    title: 'Security & sandboxing model',
+    sub: 'Defence-in-depth for an autonomous offensive security tool',
+    diagram: `graph TD
+  subgraph OUTER["Outer perimeter"]
+    WAF[WAF + rate limit]
+    AUTHN[API key auth\nJWT short-lived]
+    SCOPE2[Scope enforcer\nallow-list DB]
+  end
+  subgraph SANDBOX["Tool sandbox"]
+    NS2[Linux network\nnamespace]
+    SEC[Seccomp profile\nminimal syscalls]
+    RO[Read-only rootfs]
+    TMP[tmpfs scratch /tmp]
+    TOUT[Tool timeout\n120s max]
+  end
+  subgraph AUDIT2["Audit & compliance"]
+    AL[All HTTP egress\nlogged to S3]
+    SL[Scope violation\nalerts — PagerDuty]
+    IM[Immutable audit trail\nwrite-once S3]
+  end
+  REQ[Incoming request] --> WAF --> AUTHN --> SCOPE2
+  SCOPE2 -->|allowed| SANDBOX
+  SCOPE2 -->|blocked| SL
+  SANDBOX --> NS2 & SEC & RO & TMP & TOUT
+  SANDBOX --> AL --> IM`,
+    notes: 'CRITICAL: every tool call checks the target URL against the program scope allow-list BEFORE execution. Scope violations are hard-blocked, logged, and alerted. Tool containers run as non-root UID 65534, with no capability grants. Network namespace restricts egress to target IPs only. Secrets are injected via Kubernetes Secrets + Vault, never in env vars or config files.'
+  },
+  {
+    id: 'api',
+    label: '14 · API contracts',
+    title: 'Inter-agent API contracts',
+    sub: 'Canonical message schemas on the event bus',
+    diagram: `graph LR
+  subgraph SCHEMAS["Message schemas — JSON / protobuf"]
+    T1[TaskMessage\nid, type, agent\ninput, priority\nengagement_id]
+    T2[FindingMessage\nid, title, severity\nurl, param\nevidence_s3_key\nconfidence_score]
+    T3[ObservationMessage\ntask_id, tool\nstdout_s3, parsed\nduration_ms]
+    T4[ReportMessage\nengagement_id\nfindings[]\nformat, template]
+  end
+  OR5[Orchestrator] -->|emit TaskMessage| MQ3[Message queue]
+  MQ3 -->|consume| AGENT5[Agent]
+  AGENT5 -->|emit ObservationMessage| MQ3
+  AGENT5 -->|emit FindingMessage| MQ3
+  MQ3 -->|consume| VR4[Verifier]
+  VR4 -->|emit FindingMessage verified=true| MQ3
+  MQ3 -->|consume| RP3[Reporter]
+  RP3 -->|emit ReportMessage| MQ3`,
+    notes: 'All schemas are versioned (schema_version field). Agents must handle unknown fields gracefully (forward compatibility). Breaking changes require a new schema version and a migration period. Schema registry (Confluent-compatible) validates messages at publish time in production.'
+  },
+  {
+    id: 'arch',
+    label: '15 · Micro vs mono',
+    title: 'Architecture recommendation',
+    sub: 'Modular monolith → microservices migration path',
+    diagram: `graph LR
+  subgraph V1["V1 — modular monolith (now)"]
+    M1[Single deployable\nGo or Python]
+    M2[Internal module\nboundaries]
+    M3[In-process\nevent bus]
+    M4[Single DB\nschema per module]
+  end
+  subgraph V2["V2 — partial extraction (3-6 mo)"]
+    S1[Browser service\nextracted — heavy]
+    S2[Tool runner service\nextracted — isolated]
+    S3[Core monolith\nshrinking]
+  end
+  subgraph V3["V3 — full microservices (12 mo+)"]
+    MS1[Orchestrator svc]
+    MS2[Agent svc]
+    MS3[Browser svc]
+    MS4[Tool runner svc]
+    MS5[Report svc]
+    MS6[Memory svc]
+  end
+  V1 -->|extract heavy services| V2 -->|extract by team boundary| V3`,
+    notes: 'RECOMMENDATION: Start with a modular monolith. Buggi has high internal coupling between agents — microservices-first would produce a distributed monolith with extra latency. Extract the Browser service first (it is the natural boundary: stateful, resource-heavy, separate scaling needs). Extract Tool Runners second (security sandbox boundary). Keep the rest as a monolith until team size justifies service ownership.'
+  }
+];
+
+const navEl = document.getElementById('nav');
+const sectionsEl = document.getElementById('sections');
+
+sections.forEach((s, i) => {
+  const btn = document.createElement('button');
+  btn.textContent = s.label;
+  btn.dataset.id = s.id;
+  if (i === 0) btn.classList.add('active');
+  btn.onclick = () => showSection(s.id);
+  navEl.appendChild(btn);
+
+  const div = document.createElement('div');
+  div.className = 'section' + (i === 0 ? ' active' : '');
+  div.id = 'sec-' + s.id;
+  div.innerHTML = `
+    <p class="section-title">${s.title}</p>
+    <p class="section-sub">${s.sub}</p>
+    <div class="mermaid-wrap">
+      <div class="mermaid" id="mm-${s.id}">${s.diagram}</div>
+    </div>
+    <div class="note">${s.notes}</div>
+  `;
+  sectionsEl.appendChild(div);
+});
+
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  document.querySelector(`.nav button[data-id="${id}"]`).classList.add('active');
+  renderSection(id);
+}
+
+const rendered = new Set();
+async function renderSection(id) {
+  if (rendered.has(id)) return;
+  rendered.add(id);
+  const el = document.getElementById('mm-' + id);
+  if (!el) return;
+  try {
+    const { svg } = await mermaid.render('mermaid-' + id, el.textContent.trim());
+    el.innerHTML = svg;
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--color-text-danger);font-size:12px">Diagram render error</p>';
+  }
+}
+
+renderSection('system');
+</script>
