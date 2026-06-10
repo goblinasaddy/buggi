@@ -1,0 +1,6 @@
+For backend
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+for tauri
+npm run tauri:dev
+npm run backend:dev

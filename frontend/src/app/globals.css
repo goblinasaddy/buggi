@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: transparent;
+  --foreground: #e2e8f0;
+}
+
+body {
+  background-color: transparent !important;
+  background: transparent !important;
+  color: var(--foreground);
+  font-family: 'JetBrains Mono', ui-monospace, Consolas, "Fira Code", monospace;
+  overflow-x: hidden;
+}
+
+/* Custom Webkit scrollbar for terminal styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #0B0F14;
+}
+::-webkit-scrollbar-thumb {
+  background: #1C2331;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00FF88;
+}
+
+/* Terminal scanline grid effect */
+.scanline {
+  position: relative;
+}
+.scanline::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 255, 136, 0.03) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Cyberpunk glows using specified colors */
+.neon-glow-primary {
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.25);
+}
+.neon-glow-accent {
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.25);
+}
+.neon-glow-red {
+  box-shadow: 0 0 15px rgba(255, 51, 102, 0.25);
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s infinite;
+}
+
+/* Tauri native dragging flags */
+.tauri-drag {
+  -webkit-app-region: drag;
+}
+.tauri-no-drag {
+  -webkit-app-region: no-drag;
+}

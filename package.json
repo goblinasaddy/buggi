@@ -1,0 +1,19 @@
+{
+  "name": "buggi-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "backend:dev": "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\" \"npm run tauri:dev\"",
+    "install:all": "npm install && npm --prefix frontend install && pip install fastapi uvicorn sqlalchemy pydantic websockets pytest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.11",
+    "concurrently": "^8.2.2"
+  }
+}
