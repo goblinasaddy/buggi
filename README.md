@@ -1,4 +1,9 @@
+<p align="center">
+  <img src="buggi-logo.svg" width="120" height="120" alt="Buggi Logo" />
+</p>
+
 # Buggi - Autonomous Bug Bounty Research Assistant
+
 
 Buggi is a desktop-resident security research and security validation platform designed to assist security engineers, authorized bug bounty hunters, and internal organization teams in attack surface management and security assessment.
 

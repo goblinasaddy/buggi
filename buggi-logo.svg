@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="120" height="120">
+  <defs>
+    <style>
+      .face {
+        fill: #05070a;
+        stroke: #00FF88;
+        stroke-width: 3.5;
+        transform-origin: center;
+        animation: face-attack 6s infinite ease-in-out;
+      }
+      .eye-left {
+        fill: #00FF88;
+        transform-origin: 36px 42px;
+        animation: eye-left-blink 6s infinite ease-in-out;
+      }
+      .eye-right {
+        fill: #00FF88;
+        transform-origin: 64px 42px;
+        animation: eye-right-blink 6s infinite ease-in-out;
+      }
+      .mouth {
+        fill: none;
+        stroke: #00FF88;
+        stroke-width: 3.5;
+        stroke-linecap: round;
+        transform-origin: center;
+        animation: face-attack 6s infinite ease-in-out;
+      }
+
+      @keyframes eye-left-blink {
+        0%, 45% { transform: scaleY(1); fill: #00FF88; }
+        47% { transform: scaleY(0.1); fill: #00FF88; }
+        49%, 70% { transform: scaleY(1); fill: #00FF88; }
+        /* Attack phase */
+        75% { transform: scale(1); fill: #ff3366; }
+        77% { transform: scale(1.3); fill: #ff3366; }
+        79% { transform: scale(0.8); fill: #ff3366; }
+        81% { transform: scale(1.2); fill: #ff3366; }
+        83%, 100% { transform: scale(1); fill: #00FF88; }
+      }
+
+      @keyframes eye-right-blink {
+        0%, 45% { transform: scaleY(1); fill: #00FF88; }
+        47% { transform: scaleY(0.1); fill: #00FF88; }
+        49%, 70% { transform: scaleY(1); fill: #00FF88; }
+        /* Attack phase */
+        75% { transform: scale(1); fill: #ff3366; }
+        77% { transform: scale(1.3); fill: #ff3366; }
+        79% { transform: scale(0.8); fill: #ff3366; }
+        81% { transform: scale(1.2); fill: #ff3366; }
+        83%, 100% { transform: scale(1); fill: #00FF88; }
+      }
+
+      @keyframes face-attack {
+        0%, 73% { transform: translate(0, 0); stroke: #00FF88; }
+        75% { transform: translate(-2px, 1px); stroke: #ff3366; }
+        77% { transform: translate(2px, -1px); stroke: #ff3366; }
+        79% { transform: translate(-1px, -2px); stroke: #ff3366; }
+        81% { transform: translate(1px, 2px); stroke: #ff3366; }
+        83% { transform: translate(0, 0); stroke: #ff3366; }
+        85%, 100% { transform: translate(0, 0); stroke: #00FF88; }
+      }
+    </style>
+  </defs>
+
+  <!-- Face Container -->
+  <rect class="face" x="15" y="15" width="70" height="70" rx="15" />
+
+  <!-- Eyes -->
+  <rect class="eye-left" x="30" y="36" width="12" height="12" rx="2.5" />
+  <rect class="eye-right" x="58" y="36" width="12" height="12" rx="2.5" />
+
+  <!-- Mouth -->
+  <path class="mouth" d="M 44 58 Q 50 62 56 58" />
+</svg>
