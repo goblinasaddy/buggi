@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Terminal, Shield, List, FileText, LayoutDashboard, Cpu } from "lucide-react";
+import { Terminal, Shield, List, FileText, LayoutDashboard, Cpu, Database } from "lucide-react";
 
 interface SidebarProps {
   statusText?: string;
@@ -14,6 +14,7 @@ export default function Sidebar({ statusText = "STANDBY", activeScanCount = 0 }:
   const menuItems = [
     { name: "DASHBOARD", path: "/", icon: LayoutDashboard },
     { name: "SCANS", path: "/scans/", icon: Terminal },
+    { name: "ASSETS", path: "/assets/", icon: Database },
     { name: "FINDINGS", path: "/findings/", icon: Shield },
     { name: "REPORTS", path: "/reports/", icon: FileText },
   ];

@@ -12,6 +12,13 @@ export default function CommandCenter() {
   const [findings, setFindings] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   
+  const [assetCounts, setAssetCounts] = useState<{
+    total: number;
+    domains: number;
+    endpoints: number;
+    technologies: number;
+  }>({ total: 0, domains: 0, endpoints: 0, technologies: 0 });
+  
   // Active selected scan monitoring
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [activeScan, setActiveScan] = useState<any | null>(null);
@@ -104,6 +111,16 @@ export default function CommandCenter() {
     return () => clearInterval(interval);
   }, [activeScanId]);
 
+  const triggerAssetDiscovery = async (scanId: string, targetUrl: string) => {
+    try {
+      fetch(`http://localhost:8000/api/assets/${scanId}/discover?target=${encodeURIComponent(targetUrl)}`, {
+        method: "POST"
+      });
+    } catch (e) {
+      console.error("Failed to trigger asset discovery:", e);
+    }
+  };
+
   // Handle Scan Selection (retrieves historic event logs, then binds WebSocket)
   const selectScan = async (scanId: string) => {
     setActiveScanId(scanId);
@@ -124,6 +141,24 @@ export default function CommandCenter() {
       const eRes = await fetch(`http://localhost:8000/api/scans/${scanId}/events`);
       const eData = await eRes.json();
       setLogEvents(eData);
+
+      // Fetch initial asset summary
+      try {
+        const assetSummaryRes = await fetch(`http://localhost:8000/api/assets/${scanId}/summary`);
+        if (assetSummaryRes.ok) {
+          const summaryData = await assetSummaryRes.json();
+          setAssetCounts({
+            total: summaryData.total_assets || 0,
+            domains: (summaryData.by_type?.domain || 0) + (summaryData.by_type?.subdomain || 0),
+            endpoints: summaryData.by_type?.endpoint || 0,
+            technologies: summaryData.by_type?.technology || 0,
+          });
+        } else {
+          setAssetCounts({ total: 0, domains: 0, endpoints: 0, technologies: 0 });
+        }
+      } catch (err) {
+        console.error("Error fetching asset counts:", err);
+      }
 
       // Connect WebSocket for live events
       connectWebSocket(scanId);
@@ -154,6 +189,16 @@ export default function CommandCenter() {
           setPetState("reporting");
         } else if (data.event_type === "SCAN_COMPLETED") {
           setPetState("idle");
+        }
+      } else if (data.type === "asset_discovery_complete") {
+        const summaryData = data.summary;
+        if (summaryData) {
+          setAssetCounts({
+            total: summaryData.total_assets || 0,
+            domains: (summaryData.by_type?.domain || 0) + (summaryData.by_type?.subdomain || 0),
+            endpoints: summaryData.by_type?.endpoint || 0,
+            technologies: summaryData.by_type?.technology || 0,
+          });
         }
       }
     };
@@ -240,6 +285,7 @@ export default function CommandCenter() {
 
         if (res.ok) {
           const data = await res.json();
+          triggerAssetDiscovery(data.id, data.target_url);
           selectScan(data.id);
         }
       } catch (err) {
@@ -276,6 +322,7 @@ export default function CommandCenter() {
         const data = await res.json();
         setTargetUrl("");
         setShowScanModal(false);
+        triggerAssetDiscovery(data.id, data.target_url);
         selectScan(data.id);
       }
     } catch (err) {
@@ -427,6 +474,32 @@ export default function CommandCenter() {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        {/* ASSET SUMMARY Panel */}
+        <div className="bg-[#131A1A] border border-[#1f2e2e]/50 rounded-md p-4 flex flex-col gap-2.5 shadow-[0_0_15px_rgba(0,255,136,0.03)]">
+          <span className="text-[10px] text-gray-500 tracking-widest uppercase font-bold border-b border-[#1f2e2e]/30 pb-1.5 select-none">
+            ASSETS DISCOVERED
+          </span>
+
+          <div className="space-y-2 text-[10px] leading-relaxed">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Total Assets:</span>
+              <span className="text-[#00FF88] font-bold">{assetCounts.total}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Domains:</span>
+              <span className="text-[#00E5FF] font-bold">{assetCounts.domains}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Endpoints:</span>
+              <span className="text-[#00E5FF] font-bold">{assetCounts.endpoints}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Technologies:</span>
+              <span className="text-cyber-amber font-bold">{assetCounts.technologies}</span>
+            </div>
           </div>
         </div>
 

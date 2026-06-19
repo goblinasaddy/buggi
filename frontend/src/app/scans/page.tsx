@@ -220,6 +220,16 @@ export default function ScansPage() {
     return match ? match.id : "root";
   };
 
+  const triggerAssetDiscovery = async (scanId: string, targetUrl: string) => {
+    try {
+      fetch(`http://localhost:8000/api/assets/${scanId}/discover?target=${encodeURIComponent(targetUrl)}`, {
+        method: "POST"
+      });
+    } catch (e) {
+      console.error("Failed to trigger asset discovery:", e);
+    }
+  };
+
   // Triggered on form submit
   const handleLaunchScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +250,8 @@ export default function ScansPage() {
         const data = await res.json();
         // Clear input form
         setTargetUrl("");
+        // Trigger asset discovery in background
+        triggerAssetDiscovery(data.id, data.target_url);
         // Reload scans list
         const sRes = await fetch("http://localhost:8000/api/scans/");
         const sData = await sRes.json();
