@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import APP_NAME, VERSION, DEBUG
 from backend.database.db import engine, Base, SessionLocal
 from backend.database.models import ProgramProfile
-from backend.api import scans, findings, reports, profiles
+from backend.api import scans, findings, reports, profiles, assets as assets_api
 from backend.queue.worker import background_worker
 
 # Set up logging
@@ -38,6 +38,7 @@ app.include_router(profiles.router, prefix="/api")
 app.include_router(scans.router, prefix="/api")
 app.include_router(findings.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(assets_api.router, prefix="/api")
 
 # Seeding Pre-built Program Profiles
 def seed_profiles():

@@ -1,7 +1,7 @@
 import os
 import json
 import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from backend.config import REPORTS_DIR, ARTIFACTS_DIR
 
 class LocalReportManager:
@@ -108,3 +108,89 @@ This vulnerability was detected and automatically verified by Buggi's agent work
                 f.write(str(data))
                 
         return filepath
+
+    @staticmethod
+    def generate_asset_report(
+        scan_id: str,
+        target_url: str,
+        assets_summary: Dict[str, Any],
+        technologies: Dict[str, Any],
+        graph_stats: Dict[str, Any],
+        profile_name: str = "N/A",
+        findings_count: int = 0,
+    ) -> Dict[str, str]:
+        timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        safe_target = target_url.replace("https://", "").replace("http://", "").replace("/", "_").replace(":", "_")
+        report_title = f"Buggi Asset Intelligence Report - {target_url}"
+        report_data = {
+            "scan_id": scan_id,
+            "target_url": target_url,
+            "profile_name": profile_name,
+            "generated_at": datetime.datetime.utcnow().isoformat(),
+            "report_type": "asset_intelligence",
+            "assets_summary": assets_summary,
+            "technologies": technologies,
+            "graph_statistics": graph_stats,
+            "findings_count": findings_count,
+        }
+        json_filename = f"asset_report_{safe_target}_{timestamp}.json"
+        md_filename = f"asset_report_{safe_target}_{timestamp}.md"
+        json_path = os.path.join(REPORTS_DIR, json_filename)
+        md_path = os.path.join(REPORTS_DIR, md_filename)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=4)
+        by_type_str = "\n".join(
+            f"  * **{k}:** {v}" for k, v in assets_summary.get("by_type", {}).items()
+        )
+        tech_str = "\n".join(
+            f"  * **{k}** (x{v})" for k, v in technologies.get("technologies", {}).items()
+        )
+        md_content = f"""# {report_title}
+
+**Target URL:** {target_url}
+**Program Profile:** {profile_name}
+**Date Generated:** {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}
+**Scan ID:** `{scan_id}`
+
+---
+
+## Asset Intelligence Summary
+
+Total Assets Discovered: **{assets_summary.get('total_assets', 0)}**
+
+### Breakdown by Type
+{by_type_str}
+
+### Breakdown by Source
+{chr(10).join('  * **' + k + ':** ' + str(v) for k, v in assets_summary.get('by_source', {}).items())}
+
+---
+
+## Technology Stack
+Total Technologies Identified: **{technologies.get('total', 0)}**
+
+{tech_str if tech_str else '  * No technologies identified.'}
+
+---
+
+## Asset Graph Statistics
+* Total Graph Nodes: **{graph_stats.get('total_nodes', 0)}**
+* Total Graph Edges: **{graph_stats.get('total_edges', 0)}**
+* Connected Components: **{graph_stats.get('connected_components', 0)}**
+* Max Graph Depth: **{graph_stats.get('max_depth', 0)}**
+
+---
+
+## Associated Findings
+* Total Findings in Scan: **{findings_count}**
+
+---
+"""
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
+        return {
+            "json_path": json_path,
+            "markdown_path": md_path,
+            "json_filename": json_filename,
+            "markdown_filename": md_filename,
+        }

@@ -37,6 +37,10 @@ class Scan(Base):
     events = relationship("ScanEvent", back_populates="scan", cascade="all, delete-orphan")
     graph_nodes = relationship("ScanGraphNode", back_populates="scan", cascade="all, delete-orphan")
     graph_edges = relationship("ScanGraphEdge", back_populates="scan", cascade="all, delete-orphan")
+    assets = relationship("Asset", back_populates="scan", cascade="all, delete-orphan")
+    asset_graph_nodes = relationship("AssetGraphNode", back_populates="scan", cascade="all, delete-orphan")
+    asset_graph_edges = relationship("AssetGraphEdge", back_populates="scan", cascade="all, delete-orphan")
+    asset_events = relationship("AssetEvent", back_populates="scan", cascade="all, delete-orphan")
 
 
 class ScanEvent(Base):
